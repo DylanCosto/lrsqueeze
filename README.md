@@ -1,6 +1,6 @@
 # lrsqueeze
 
-Lossy archives for Oxford Nanopore and PacBio long reads that pipelines read like the original.
+Lossy archives for Oxford Nanopore and PacBio long reads
 
 lrsqueeze takes an aligned BAM or CRAM (or a FASTQ), makes a few measured lossy changes to each
 record, and writes standard CRAM, BAM or FASTQ.gz. Variant callers, SV callers, methylation tools
@@ -131,7 +131,7 @@ the aligned BAM with the read-based rule gives. Measured that way on ONT HAC chr
 does: SNP −0.001 pp, indel −0.084 pp (−0.454 pp without protection). On ONT SUP HG003 it matched
 the default within ±0.003 pp ([benchmarks](benchmarks/README.md#summary-fastq)).
 
-## What changes
+## Changes
 
 | | Default | `--max` |
 |---|---|---|
@@ -178,7 +178,7 @@ quality tags `qs` and `rq`, `mv` move tables, and every other tag.
 secondaries). CRAM cannot regenerate these tags, so it would store them verbatim; every other
 `MD`/`NM` is regenerated on decoding.
 
-## What it means for pipelines
+## Pipelines
 
 Measured on whole genomes against GIAB v4.2.1:
 
