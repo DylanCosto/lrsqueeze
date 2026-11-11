@@ -3,7 +3,9 @@
 Notable changes to lrsqueeze (called lrslim up to 0.2.1). The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## Unreleased
+## 0.9.0 - 2026-11-11
+
+The first public release, as lrsqueeze. Versions jump from 0.2.1 to 0.9.0.
 
 ### Changed
 
