@@ -1,0 +1,38 @@
+[package]
+name = "lrsqueeze"
+version = "0.2.1"
+description = "Lossy archives for Oxford Nanopore and PacBio long reads that pipelines read like the original"
+license = "MIT"
+repository = "https://github.com/DylanCosto/lrsqueeze"
+readme = "README.md"
+keywords = ["bioinformatics", "nanopore", "pacbio", "cram", "compression"]
+categories = ["science", "compression", "command-line-utilities"]
+edition = "2024"
+rust-version = "1.91"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+# gzip FASTQ input (pasta reads BGZF only); the zlib-rs backend is pure Rust, as in pasta.
+flate2 = { version = "1.1.11", default-features = false, features = ["zlib-rs"] }
+# pasta (DylanCosto/pasta): SAM/BAM/CRAM/FASTA, begun from noodles. Not on crates.io, where the
+# name belongs to another crate. Pinned to main after the 0.9.1 release, for multithreaded CRAM
+# decoding (zflate DEFLATE, CRAM written as HTSlib writes it); no C code.
+pasta = { git = "https://github.com/DylanCosto/pasta", rev = "4ccbbb42d664acf7b5cc19495f95d0a3261dc13e" }
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.8"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+allow_attributes_without_reason = "warn"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"

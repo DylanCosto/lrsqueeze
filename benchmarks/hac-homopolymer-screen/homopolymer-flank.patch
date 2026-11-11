@@ -1,0 +1,329 @@
+diff --git a/src/homopolymer.rs b/src/homopolymer.rs
+index 89e4bcc..c1f2572 100644
+--- a/src/homopolymer.rs
++++ b/src/homopolymer.rs
+@@ -13,8 +13,9 @@ pub struct Runs {
+ }
+ 
+ impl Runs {
+-    /// Finds the runs of one base (A, C, G, or T, either case) at least `min_length` long.
+-    pub fn find(sequence: &[u8], min_length: usize) -> Self {
++    /// Finds the runs of one base (A, C, G, or T, either case) at least `min_length` long, each
++    /// widened by `flank` bases on both sides (clamped to the sequence; overlaps merged).
++    pub fn find(sequence: &[u8], min_length: usize, flank: usize) -> Self {
+         let mut runs = Self::default();
+         let mut i = 0;
+         while i < sequence.len() {
+@@ -24,10 +25,17 @@ impl Runs {
+                 j += 1;
+             }
+             if matches!(base, b'A' | b'C' | b'G' | b'T') && j - i >= min_length {
+-                runs.starts
+-                    .push(u32::try_from(i).expect("reference sequences fit in u32"));
+-                runs.ends
+-                    .push(u32::try_from(j).expect("reference sequences fit in u32"));
++                let start =
++                    u32::try_from(i.saturating_sub(flank)).expect("reference sequences fit in u32");
++                let end = u32::try_from((j + flank).min(sequence.len()))
++                    .expect("reference sequences fit in u32");
++                match runs.ends.last_mut() {
++                    Some(last) if *last >= start => *last = (*last).max(end),
++                    _ => {
++                        runs.starts.push(start);
++                        runs.ends.push(end);
++                    }
++                }
+             }
+             i = j;
+         }
+@@ -95,7 +103,7 @@ mod tests {
+ 
+     #[test]
+     fn finds_runs_case_insensitively_and_skips_n() {
+-        let runs = Runs::find(b"ACaaaAAGTTTTNNNNNNcccccc", 5);
++        let runs = Runs::find(b"ACaaaAAGTTTTNNNNNNcccccc", 5, 0);
+         // aaaAA at 2..7, NNNNNN ignored, cccccc at 18..24; TTTT is too short.
+         assert_eq!(
+             (runs.starts.clone(), runs.ends.clone()),
+@@ -104,6 +112,23 @@ mod tests {
+         assert!(runs.contains(2) && runs.contains(6) && !runs.contains(7) && !runs.contains(1));
+     }
+ 
++    #[test]
++    fn flanks_widen_clamp_and_merge() {
++        let sequence = b"AAAAAGCGCTTTTTGCCCCCGAAAAA";
++        // Runs 0..5, 9..14, 15..20, 21..26.
++        let runs = Runs::find(sequence, 5, 0);
++        assert_eq!(
++            (runs.starts.clone(), runs.ends.clone()),
++            (vec![0, 9, 15, 21], vec![5, 14, 20, 26])
++        );
++        // Flank 2: 0..7 (clamped), 7..16, 13..22, 19..26 (clamped): touching ranges merge.
++        let runs = Runs::find(sequence, 5, 2);
++        assert_eq!((runs.starts, runs.ends), (vec![0], vec![26]));
++        // Flank 1: 0..6, 8..15, 14..21, 20..26: the last three merge.
++        let runs = Runs::find(sequence, 5, 1);
++        assert_eq!((runs.starts, runs.ends), (vec![0, 8], vec![6, 26]));
++    }
++
+     #[test]
+     fn projects_matches_insertions_and_clips() {
+         // Reference run at 10..15.
+diff --git a/src/pack.rs b/src/pack.rs
+index 808e1f5..d379c24 100644
+--- a/src/pack.rs
++++ b/src/pack.rs
+@@ -359,7 +359,9 @@ pub fn pack(options: &PackOptions) -> anyhow::Result<Report> {
+         .transpose()?;
+     let mut writer = Output::create(options, &policy, repository.as_ref(), &header)?;
+     let mut references = ReferenceCache::new(
+-        transformer.homopolymer_length(),
++        transformer
++            .homopolymer_length()
++            .map(|n| (n, transformer.homopolymer_flank())),
+         transformer.needs_reference(),
+         repository,
+     );
+@@ -442,7 +444,8 @@ fn open_reference(path: &Path) -> anyhow::Result<fasta::Repository> {
+ /// What records need from their reference sequences: homopolymer runs (found once per
+ /// sequence), and for CpG context the sequence itself (only the current one is kept).
+ struct ReferenceCache {
+-    min_length: Option<usize>,
++    /// Homopolymer minimum length and flank, when runs are needed.
++    rule: Option<(usize, usize)>,
+     keep_sequence: bool,
+     repository: Option<fasta::Repository>,
+     runs: HashMap<usize, Runs>,
+@@ -450,14 +453,14 @@ struct ReferenceCache {
+ }
+ 
+ impl ReferenceCache {
+-    /// `repository` must be set when either `min_length` or `keep_sequence` is.
++    /// `repository` must be set when either `rule` or `keep_sequence` is.
+     fn new(
+-        min_length: Option<usize>,
++        rule: Option<(usize, usize)>,
+         keep_sequence: bool,
+         repository: Option<fasta::Repository>,
+     ) -> Self {
+         Self {
+-            min_length,
++            rule,
+             keep_sequence,
+             repository,
+             runs: HashMap::new(),
+@@ -467,7 +470,7 @@ impl ReferenceCache {
+ 
+     /// Makes what reference sequence `id` needs available to [`context`](Self::context).
+     fn load(&mut self, header: &sam::Header, id: usize) -> anyhow::Result<()> {
+-        let need_runs = self.min_length.is_some() && !self.runs.contains_key(&id);
++        let need_runs = self.rule.is_some() && !self.runs.contains_key(&id);
+         let need_sequence =
+             self.keep_sequence && self.current.as_ref().is_none_or(|(c, _)| *c != id);
+         if !need_runs && !need_sequence {
+@@ -486,9 +489,11 @@ impl ReferenceCache {
+             .get(name)
+             .with_context(|| format!("reference sequence {name} is not in the FASTA"))?
+             .with_context(|| format!("reading reference sequence {name}"))?;
+-        if let Some(min_length) = self.min_length.filter(|_| need_runs) {
+-            self.runs
+-                .insert(id, Runs::find(sequence.as_ref().as_ref(), min_length));
++        if let Some((min_length, flank)) = self.rule.filter(|_| need_runs) {
++            self.runs.insert(
++                id,
++                Runs::find(sequence.as_ref().as_ref(), min_length, flank),
++            );
+         }
+         if need_sequence {
+             self.current = Some((id, sequence));
+diff --git a/src/policy.rs b/src/policy.rs
+index 755da9e..521b3fd 100644
+--- a/src/policy.rs
++++ b/src/policy.rs
+@@ -70,6 +70,7 @@ impl Policy {
+                 Quality::Bins {
+                     bins: bins(ONT_Q8),
+                     preserve_homopolymers: Some(5),
++                    homopolymer_flank: 0,
+                 },
+                 Secondary::Keep,
+             ),
+@@ -77,6 +78,7 @@ impl Policy {
+                 Quality::Bins {
+                     bins: bins(ONT_Q4),
+                     preserve_homopolymers: Some(5),
++                    homopolymer_flank: 0,
+                 },
+                 Secondary::Drop,
+             ),
+@@ -84,6 +86,7 @@ impl Policy {
+                 Quality::Bins {
+                     bins: bins(PACBIO_Q3),
+                     preserve_homopolymers: None,
++                    homopolymer_flank: 0,
+                 },
+                 Secondary::Keep,
+             ),
+@@ -153,6 +156,9 @@ pub enum Quality {
+         /// anchored in them). Needs the alignment and the reference.
+         #[serde(default, skip_serializing_if = "Option::is_none")]
+         preserve_homopolymers: Option<usize>,
++        /// Also keep native scores this many bases on each side of those homopolymers.
++        #[serde(default, skip_serializing_if = "is_zero")]
++        homopolymer_flank: usize,
+     },
+     /// One score for every base of a read.
+     PerRead {
+@@ -267,6 +273,10 @@ pub struct Alignments {
+     pub strip_md_without_sequence: bool,
+ }
+ 
++fn is_zero(n: &usize) -> bool {
++    *n == 0
++}
++
+ fn default_true() -> bool {
+     true
+ }
+@@ -300,6 +310,15 @@ impl Policy {
+         {
+             return Err(format!("preserve_homopolymers must be at least 2, not {n}"));
+         }
++        if let Quality::Bins {
++            preserve_homopolymers: None,
++            homopolymer_flank,
++            ..
++        } = self.quality
++            && homopolymer_flank > 0
++        {
++            return Err("homopolymer_flank needs preserve_homopolymers".to_owned());
++        }
+         if let Quality::PerRead { max, .. } = self.quality
+             && max > crate::quality::MAX_PHRED
+         {
+@@ -318,9 +337,15 @@ impl Policy {
+             Quality::Bins {
+                 bins,
+                 preserve_homopolymers,
+-            } => match preserve_homopolymers {
+-                Some(n) => format!("bins {bins}, native in reference homopolymers >={n}bp"),
+-                None => format!("bins {bins}"),
++                homopolymer_flank,
++            } => match (preserve_homopolymers, homopolymer_flank) {
++                (Some(n), 0) => format!("bins {bins}, native in reference homopolymers >={n}bp"),
++                (Some(n), f) => {
++                    format!(
++                        "bins {bins}, native in reference homopolymers >={n}bp and {f}bp flanks"
++                    )
++                }
++                (None, _) => format!("bins {bins}"),
+             },
+             Quality::PerRead { source, max } => format!("per-read from {source:?} (max {max})"),
+             Quality::Drop => "dropped".to_owned(),
+@@ -419,5 +444,19 @@ mod tests {
+         let mut policy = Policy::preset(Platform::Ont, Mode::Max);
+         policy.modifications.ml_levels = Some(1);
+         assert!(policy.validate().is_err());
++
++        let flanked = |preserve_homopolymers| Policy {
++            quality: Quality::Bins {
++                bins: ONT_Q8.parse().expect("built-in bins are valid"),
++                preserve_homopolymers,
++                homopolymer_flank: 2,
++            },
++            ..Policy::preset(Platform::Ont, Mode::Safe)
++        };
++        assert!(flanked(Some(5)).validate().is_ok());
++        assert!(
++            flanked(None).validate().is_err(),
++            "a flank needs homopolymers"
++        );
+     }
+ }
+diff --git a/src/transform.rs b/src/transform.rs
+index 8bffd3e..dcc2630 100644
+--- a/src/transform.rs
++++ b/src/transform.rs
+@@ -58,6 +58,7 @@ enum QualityOp {
+     Bins {
+         lut: Box<[u8; 256]>,
+         preserve: Option<usize>,
++        flank: usize,
+     },
+     PerRead {
+         source: ReadQualitySource,
+@@ -96,9 +97,11 @@ impl Transformer {
+             Quality::Bins {
+                 bins,
+                 preserve_homopolymers,
++                homopolymer_flank,
+             } => QualityOp::Bins {
+                 lut: Box::new(bins.lut()),
+                 preserve: *preserve_homopolymers,
++                flank: *homopolymer_flank,
+             },
+             Quality::PerRead { source, max } => QualityOp::PerRead {
+                 source: *source,
+@@ -125,6 +128,14 @@ impl Transformer {
+         }
+     }
+ 
++    /// The flank around homopolymers that [`apply`](Self::apply) protects too.
++    pub fn homopolymer_flank(&self) -> usize {
++        match self.quality {
++            QualityOp::Bins { flank, .. } => flank,
++            _ => 0,
++        }
++    }
++
+     /// Whether [`apply`](Self::apply) needs the reference sequence (for CpG context).
+     pub fn needs_reference(&self) -> bool {
+         matches!(
+@@ -275,7 +286,7 @@ impl Transformer {
+         self.stats.quality_bases += range.len() as u64;
+         match &self.quality {
+             QualityOp::Keep => {}
+-            QualityOp::Bins { lut, preserve } => {
++            QualityOp::Bins { lut, preserve, .. } => {
+                 let keep = &mut self.keep;
+                 keep.clear();
+                 keep.resize(range.len(), false);
+@@ -348,7 +359,7 @@ mod tests {
+     #[test]
+     fn ont_preset_bins_outside_homopolymers_and_quantizes_ml() {
+         let mut t = Transformer::new(&Policy::preset(Platform::Ont, Mode::Max));
+-        let runs = Runs::find(b"ACGTAAAAACGT", 5); // run at 4..9
++        let runs = Runs::find(b"ACGTAAAAACGT", 5, 0); // run at 4..9
+         let aux = [b"MLBC".as_slice(), &3u32.to_le_bytes(), &[0, 100, 255]].concat();
+         // 6M starting at reference 2: reference 2..8, of which 4..8 are in the run.
+         let mut buf = record(0, 2, &[(0, 6)], &[3, 12, 40, 41, 42, 25], &aux);
+diff --git a/tests/pack.rs b/tests/pack.rs
+index 9422ff1..084b5ff 100644
+--- a/tests/pack.rs
++++ b/tests/pack.rs
+@@ -256,6 +256,25 @@ fn custom_policy_replaces_the_built_in_one() -> anyhow::Result<()> {
+     Ok(())
+ }
+ 
++#[test]
++fn homopolymer_flank_widens_protection() -> anyhow::Result<()> {
++    let dir = tempfile::tempdir()?;
++    write_inputs(dir.path(), SAM)?;
++    let text = toml::to_string(&Policy::preset(Platform::Ont, Mode::Safe))?.replace(
++        "preserve_homopolymers = 5",
++        "preserve_homopolymers = 5\nhomopolymer_flank = 2",
++    );
++    let mut opts = options(dir.path(), Mode::Safe, Format::Cram);
++    opts.custom_policy = Some(toml::from_str(&text)?);
++    pack::pack(&opts)?;
++    let records = read_cram(dir.path())?;
++    // The A run (query 2..=8) and 2 bases on each side keep Q13.
++    let mut want = vec![12; 12];
++    want[..=10].fill(13);
++    assert_eq!(quals(&records[0]), want);
++    Ok(())
++}
++
+ #[test]
+ fn format_follows_the_extension() {
+     assert_eq!(Format::from_path(Path::new("a/x.bam")), Format::Bam);

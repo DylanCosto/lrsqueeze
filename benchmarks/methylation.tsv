@@ -1,0 +1,7 @@
+dataset	condition	against	method	modification	sites	pearson	mean_abs_diff_pp	p95_abs_diff_pp	call50_agreement	valid_coverage_ratio	identical_sites
+ont_sup	default	original	pileup --cpg --combine-strands --filter-threshold C:0.8 (modkit 0.6.4)	5hmC	28560482	0.977239	0.0507	0.0	0.999995	1.006694	
+ont_sup	default	original	pileup --cpg --combine-strands --filter-threshold C:0.8 (modkit 0.6.4)	5mC	28560482	0.999359	0.3881	2.8	0.995671	1.006694	
+pb_revio	default	original	pileup --cpg --combine-strands --filter-threshold C:0.8 (modkit 0.6.4)	5mC	28026177	0.997580	0.9757	5.2	0.991971	0.972307	
+ont_sup	default_cpg_only	default	pileup --cpg --combine-strands --filter-threshold C:0.8 (modkit 0.6.4)	5hmC	28675315	1.000000	0.0000	0.0	1.000000	1.000000	
+ont_sup	default_cpg_only	default	pileup --cpg --combine-strands --filter-threshold C:0.8 (modkit 0.6.4)	5mC	28675315	1.000000	0.0000	0.0	1.000000	1.000000	
+pb_revio	default	original	cpg --pileup-mode count (pb-CpG-tools 3.0.0)	5mC	28934010						28934010

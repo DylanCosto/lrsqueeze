@@ -1,0 +1,28 @@
+dataset	condition	note	bytes	percent_of_original	encode_seconds	peak_rss_gib	threads
+ont_hac	original		82438231627	100.00			
+ont_hac	default	single-threaded transform	21750037816	26.38	286	1.55	-@ 16
+ont_hac	hp4_flank0	single-threaded transform	23755614040	28.82	298	1.65	-@ 16
+ont_hac	hp4_flank2	single-threaded transform	25566165616	31.01	300	1.56	-@ 16
+ont_hac	hp5_flank2	single-threaded transform	22450500123	27.23	281	1.53	-@ 16
+ont_hac	hp5_flank5	single-threaded transform	23411957368	28.40	284	1.54	-@ 16
+ont_hac	max	single-threaded transform	18227265932	22.11	329	2.69	-@ 16
+ont_hac	q8_no_hp		20152034583	24.45	287	2.11	-@ 16
+ont_hac	read_hp4		23848565396	28.93	303	2.04	-@ 16
+ont_hac	read_hp5		21785215611	26.43	290	2.11	-@ 16
+ont_sup	original		110105413501	100.00			
+ont_sup	default	single-threaded transform	25149265879	22.84	376	1.49	-@ 16
+ont_sup	default_cpg_only		10863519489	9.87	327	2.11	-@ 16
+ont_sup	default_cpg_only	single-threaded transform	10863519485	9.87	1148	1.4	-@ 16
+ont_sup	max	lzma and bzip2 enabled; single-threaded transform	21537854464	19.56	3747	5.09	-@ 16
+ont_sup	max	single-threaded transform	22622859341	20.55	435	3.04	-@ 16
+ont_sup	q8_no_hp	single-threaded transform	22821179202	20.73	420	1.52	-@ 16
+ont_sup	read_hp5		25270572569	22.95	409	2.22	-@ 16
+pb_hifi	original		39488295765	100.00			
+pb_hifi	default	single-threaded transform	7974837702	20.20	200	1.21	-@ 16
+pb_hifi	max		1127415643	2.86	196	9.92	-@ 16
+pb_hifi	max_mean_error		1132774913	2.87	229	10.05	-@ 16
+pb_revio	original		45051970076	100.00			
+pb_revio	default	single-threaded transform	9254658284	20.54	274	1.58	-@ 16
+pb_revio	max		2444323323	5.43	282	12.63	-@ 16
+pb_revio	max_mean_error		2449717658	5.44	322	12.18	-@ 16
+pb_revio	max_rq	single-threaded transform	2509481949	5.57	381	9.64	-@ 16

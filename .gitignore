@@ -1,0 +1,4 @@
+/target
+__pycache__/
+/dist
+/scripts/wgs/local.env

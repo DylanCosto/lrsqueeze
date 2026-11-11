@@ -1,0 +1,5 @@
+# lrsqueeze is the Rust in src/ and tests/. The Python and shell under scripts/ and benchmarks/ are
+# validation tooling that is neither built nor shipped, so GitHub's language statistics leave them out.
+*.py linguist-detectable=false
+*.sh linguist-detectable=false
+*.patch linguist-detectable=false

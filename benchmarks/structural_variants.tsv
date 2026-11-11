@@ -1,0 +1,9 @@
+dataset	condition	against	pass_against	pass_condition	pass_matched	pass_only_against	pass_only_condition	records_against	records_condition	vcf_records_identical
+ont_sup	q8_no_hp	original	26786	26786	26786	0	0	27046	27046	yes
+ont_sup	max	original	26786	26786	26786	0	0	27046	27046	yes
+pb_hifi	default	original	26032	26032	26032	0	0	26287	26287	yes
+pb_revio	default	original	24507	24497	24497	10	0	24786	24776	no
+pb_revio	max_rq	original	24507	24497	24497	10	0	24786	24776	no
+ont_hac	default	original	9358	9358	9358	0	0	9430	9430	yes
+ont_hac	max	original	9358	9358	9358	0	0	9430	9430	yes
+ont_sup	default	original	26786	26786	26786	0	0	27046	27046	yes

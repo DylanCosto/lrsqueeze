@@ -1,0 +1,73 @@
+name: Release
+
+# Pushing an annotated tag vX.Y.Z tests the commit, builds lrsqueeze on Rocky Linux 8 (glibc 2.28,
+# so the Linux binary runs on RHEL 8 and later) and on macOS (Apple silicon), and publishes the
+# archives from scripts/package-release.sh, with their SHA-256 checksums, as a GitHub release.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+      - name: Check that the tag matches the crate version
+        run: |
+          set -euo pipefail
+          version=$(cargo pkgid | sed 's/.*[#@]//')
+          if [ "$version" != "${GITHUB_REF_NAME#v}" ]; then
+            echo "lrsqueeze is version $version, but the tag is $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+      - run: cargo test --locked
+
+  linux:
+    needs: test
+    runs-on: ubuntu-24.04
+    container: rockylinux:8
+    steps:
+      - name: Install build tools
+        run: dnf install -y --setopt=install_weak_deps=False gcc binutils git tar gzip curl findutils
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+      - run: cargo build --release --locked
+      - run: scripts/package-release.sh "$GITHUB_REF_NAME"
+      # Creates the release; the macOS job adds its archive to it.
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+
+  macos:
+    needs: linux
+    runs-on: macos-latest
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.99.1
+      - run: cargo build --release --locked
+      - run: scripts/package-release.sh "$GITHUB_REF_NAME"
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+          fail_on_unmatched_files: true
